@@ -1,5 +1,7 @@
 # HumanFallForecasting
 
+![Project Logo](https://github.com/AndiDemon/HumanFallForecasting/blob/main/Figures/prediction_sequence.jpd)
+
 **Dataset**
 
 https://drive.google.com/drive/folders/1GCpfPpiiZuvNxmQ1_SEApRYEEYiW41rz?usp=share_link
