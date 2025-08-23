@@ -1,5 +1,6 @@
 # HumanFallForecasting
 
+![Project Logo](https://github.com/AndiDemon-Lab/HumanFallForecasting/blob/main/Figures/camera_position.png)
 ![Project Logo](https://github.com/AndiDemon-Lab/HumanFallForecasting/blob/main/Figures/prediction_sequence.jpg)
 
 **Dataset**
