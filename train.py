@@ -16,6 +16,7 @@ from models.mlp import MLP
 from models.gru import GRUModel
 from models.rnn import RNNModel
 from models.lstm import LSTMModel
+from models.tiny_transformer import TinyTransformerModel
 from sklearn.metrics import confusion_matrix, accuracy_score
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -27,7 +28,7 @@ print("Using device:", device)
 def mpjpe(pred, target):
     return torch.mean(torch.norm(pred - target, dim=-1))
 
-model_name = "gru"  
+model_name = "tiny_transformer"  
 batch_size = 32
 num_epochs = 1000
 lr = 1e-4
@@ -210,6 +211,19 @@ if __name__ == "__main__":
             hidden_size=128,
             forecast_window=input_window,
             output_class_size=2
+        )
+
+    elif model_name == "tiny_transformer":
+        from models.tiny_transformer import TinyTransformerModel
+        model = TinyTransformerModel(
+            input_size=34,
+            forecast_window=input_window,
+            output_class_size=2,
+            d_model=64,         
+            nhead=4,            
+            num_layers=2,       
+            dim_feedforward=128,
+            dropout=0.1
         )
 
     else:

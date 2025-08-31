@@ -14,6 +14,7 @@ import matplotlib.patches as mpatches
 from collections import defaultdict, Counter
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from models.tiny_transformer import TinyTransformerModel
 from models.lstm import LSTMModel
 from models.rnn import RNNModel
 from models.gru import GRUModel
@@ -157,7 +158,7 @@ def visualize_cross_windows(pred_batch, tgt_batch, model_name, batch_idx=0,
     
     print(f"[INFO] Saved cross-window visualization to {save_path}")
 
-def evaluate(model_path="results/saved_models/gru_1000.pt", batch_size=32, visualize_motion="5_forward_falls"):
+def evaluate(model_path="results/saved_models/tiny_transformer_1000.pt", batch_size=32, visualize_motion="5_forward_falls"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with open(os.path.join(os.path.dirname(__file__), "dataset.pkl"), "rb") as f:
@@ -200,12 +201,17 @@ def evaluate(model_path="results/saved_models/gru_1000.pt", batch_size=32, visua
     keypoints_dim = len(test_data["src"][0][0]) * len(test_data["src"][0][0][0])  # 17 * 2 = 34
 
     #change based on model
-    model = GRUModel(
+    model = TinyTransformerModel(
         input_size=34,
-        hidden_size=128,
         forecast_window=input_window,
-        output_class_size=2
+        output_class_size=2,
+        d_model=64,         
+        nhead=4,            
+        num_layers=2,       
+        dim_feedforward=128,
+        dropout=0.1
     )
+
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
