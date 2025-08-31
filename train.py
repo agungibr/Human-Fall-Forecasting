@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from models.mlp import MLP
+from models.gru import GRUModel
 from models.rnn import RNNModel
 from models.lstm import LSTMModel
 from sklearn.metrics import confusion_matrix, accuracy_score
@@ -26,9 +27,9 @@ print("Using device:", device)
 def mpjpe(pred, target):
     return torch.mean(torch.norm(pred - target, dim=-1))
 
-model_name = "lstm"  
+model_name = "gru"  
 batch_size = 32
-num_epochs = 10
+num_epochs = 1000
 lr = 1e-4
 
 # -------------------------
@@ -114,7 +115,7 @@ def train(model, train_loader, num_epochs=10, lr=1e-4, model_name="default_model
     # Plot and save loss curve
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, num_epochs + 1), epoch_losses, color='blue', linewidth=2)
-    plt.title("Training Loss Over Epochs (RNN)", fontsize=14)
+    plt.title("Training Loss Over Epochs", fontsize=14)
     plt.xlabel("Epoch", fontsize=12)
     plt.ylabel("Total Loss", fontsize=12)
     plt.grid(True)
@@ -196,6 +197,15 @@ if __name__ == "__main__":
     elif model_name == "lstm":
         from models.lstm import LSTMModel
         model = LSTMModel(
+            input_size=34,
+            hidden_size=128,
+            forecast_window=input_window,
+            output_class_size=2
+        )
+
+    elif model_name == 'gru':
+        from models.gru import GRUModel
+        model = GRUModel(
             input_size=34,
             hidden_size=128,
             forecast_window=input_window,

@@ -16,6 +16,7 @@ from collections import defaultdict, Counter
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.lstm import LSTMModel
 from models.rnn import RNNModel
+from models.gru import GRUModel
 from models.mlp import MLP  
 
 SKELETON_EDGES = [
@@ -156,7 +157,7 @@ def visualize_cross_windows(pred_batch, tgt_batch, model_name, batch_idx=0,
     
     print(f"[INFO] Saved cross-window visualization to {save_path}")
 
-def evaluate(model_path="results/saved_models/lstm_1000.pt", batch_size=32, visualize_motion="5_forward_falls"):
+def evaluate(model_path="results/saved_models/gru_1000.pt", batch_size=32, visualize_motion="5_forward_falls"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     with open(os.path.join(os.path.dirname(__file__), "dataset.pkl"), "rb") as f:
@@ -198,7 +199,8 @@ def evaluate(model_path="results/saved_models/lstm_1000.pt", batch_size=32, visu
     input_window = len(test_data["src"][0])
     keypoints_dim = len(test_data["src"][0][0]) * len(test_data["src"][0][0][0])  # 17 * 2 = 34
 
-    model = LSTMModel(
+    #change based on model
+    model = GRUModel(
         input_size=34,
         hidden_size=128,
         forecast_window=input_window,

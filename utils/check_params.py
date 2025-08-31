@@ -10,6 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.mlp import MLP
 from models.lstm import LSTMModel
 from models.rnn import RNNModel
+from models.gru import GRUModel
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -59,6 +60,17 @@ def inspect_models(input_window, feature_dim, forecast_window, num_classes):
     )
     print("\n[RNN] Input Size =", rnn_input_size)
     print("[RNN] Total trainable params:", count_parameters(rnn))
+
+    #GRU
+    gru = GRUModel(
+        input_size=rnn_input_size,
+        hidden_size=128,
+        forecast_window=forecast_window,
+        output_class_size=num_classes
+    )
+
+    print("\n[GRU] Input Size =", rnn_input_size)
+    print("[GRU] Total trainable params:", count_parameters(gru))
 
 if __name__ == "__main__":
     dataset_path = os.path.join(os.path.dirname(__file__), "dataset.pkl")
