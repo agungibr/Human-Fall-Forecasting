@@ -87,9 +87,10 @@ def inspect_models(input_window, feature_dim, forecast_window, num_classes):
     print("[TRANSFORMER] Total trainable params:", count_parameters(transformer))
 
     stgcn = STGCNModel(
-        forecast_window=forecast_window,   
-        output_class_size=num_classes,           
-        layout='openpose'              
+        in_channels=2,
+        num_class=2,
+        graph_args={'layout': 'coco', 'strategy': 'uniform'},
+        edge_importance_weighting=True
     )
     print("\n[STGCN] Input Size =", rnn_input_size)
     print("[STGCN] Total trainable params:", count_parameters(stgcn))

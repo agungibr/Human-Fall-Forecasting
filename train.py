@@ -230,10 +230,12 @@ if __name__ == "__main__":
     elif model_name == "stgcn":
         from models.stgcn import STGCNModel
         model = STGCNModel(
-            forecast_window=input_window,   
-            output_class_size=2,           
-            layout='openpose'              
+            in_channels=2,
+            num_class=2,
+            graph_args={'layout': 'coco', 'strategy': 'uniform'},
+            edge_importance_weighting=True
         )
+
 
 
     else:
