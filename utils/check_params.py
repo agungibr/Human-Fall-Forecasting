@@ -11,6 +11,8 @@ from models.mlp import MLP
 from models.lstm import LSTMModel
 from models.rnn import RNNModel
 from models.gru import GRUModel
+from models.stgcn import STGCNModel
+from models.tiny_transformer import TinyTransformerModel
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -68,9 +70,29 @@ def inspect_models(input_window, feature_dim, forecast_window, num_classes):
         forecast_window=forecast_window,
         output_class_size=num_classes
     )
-
     print("\n[GRU] Input Size =", rnn_input_size)
     print("[GRU] Total trainable params:", count_parameters(gru))
+
+    transformer = TinyTransformerModel(
+        input_size=rnn_input_size,
+        forecast_window=forecast_window,
+        output_class_size=num_classes,
+        d_model=64,         
+        nhead=4,            
+        num_layers=2,       
+        dim_feedforward=128,
+        dropout=0.1
+    )
+    print("\n[TRANSFORMER] Input Size =", rnn_input_size)
+    print("[TRANSFORMER] Total trainable params:", count_parameters(transformer))
+
+    stgcn = STGCNModel(
+        forecast_window=forecast_window,   
+        output_class_size=num_classes,           
+        layout='openpose'              
+    )
+    print("\n[STGCN] Input Size =", rnn_input_size)
+    print("[STGCN] Total trainable params:", count_parameters(stgcn))
 
 if __name__ == "__main__":
     dataset_path = os.path.join(os.path.dirname(__file__), "dataset.pkl")

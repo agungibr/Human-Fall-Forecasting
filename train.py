@@ -16,6 +16,7 @@ from models.mlp import MLP
 from models.gru import GRUModel
 from models.rnn import RNNModel
 from models.lstm import LSTMModel
+from models.stgcn import STGCNModel
 from models.tiny_transformer import TinyTransformerModel
 from sklearn.metrics import confusion_matrix, accuracy_score
 
@@ -28,10 +29,10 @@ print("Using device:", device)
 def mpjpe(pred, target):
     return torch.mean(torch.norm(pred - target, dim=-1))
 
-model_name = "tiny_transformer"  
+model_name = "stgcn"  
 batch_size = 32
 num_epochs = 1000
-lr = 1e-4
+lr = 0.0001
 
 # -------------------------
 # Training Loop
@@ -225,6 +226,15 @@ if __name__ == "__main__":
             dim_feedforward=128,
             dropout=0.1
         )
+
+    elif model_name == "stgcn":
+        from models.stgcn import STGCNModel
+        model = STGCNModel(
+            forecast_window=input_window,   
+            output_class_size=2,           
+            layout='openpose'              
+        )
+
 
     else:
         raise ValueError(f"Unknown model name: {model_name}")
