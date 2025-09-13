@@ -30,7 +30,7 @@ def mpjpe(pred, target):
     return torch.mean(torch.norm(pred - target, dim=-1))
 
 model_name = "stgcn"  
-batch_size = 32
+batch_size = 64
 num_epochs = 1000
 lr = 0.0001
 
