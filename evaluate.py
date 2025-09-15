@@ -4,7 +4,7 @@ import torch
 import pickle
 import numpy as np
 from torch.utils.data import DataLoader
-from train import mpjpe
+from train import mpjpe, mpjve
 from utils.dataset import PoseDataset
 
 import matplotlib
@@ -225,6 +225,7 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         total_loss_f, total_loss_c = 0.0, 0.0
         correct, total = 0, 0
         all_mpjpe = []
+        all_mpjve = []
         visualized = False
         motion_forecast = []
         motion_target = []
@@ -257,6 +258,7 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
             total += trg_class.size(0)
 
             all_mpjpe.append(mpjpe(forecast_out, trg_forecast).item())
+            all_mpjve.append(mpjve(forecast_out, trg_forecast).item())
 
             for i in range(len(motions)):
                 motion_str = motions[i]
@@ -298,10 +300,12 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         avg_loss_f = total_loss_f / total
         avg_loss_c = total_loss_c / total
         avg_mpjpe = sum(all_mpjpe) / len(all_mpjpe)
+        avg_mpjve = sum(all_mpjve) / len(all_mpjve) 
         acc = correct / total
 
-        print(f"[Evaluation] Forecast Loss: {avg_loss_f:.4f} | Class Loss: {avg_loss_c:.4f} | "
-            f"MPJPE: {avg_mpjpe:.4f} | Accuracy: {acc:.4f}")
+        print(f"\n[Evaluation Results for {model_path}]")
+        print(f"Forecast Loss: {avg_loss_f:.4f} | Class Loss: {avg_loss_c:.4f} | "
+              f"MPJPE: {avg_mpjpe:.4f} | MPJVE: {avg_mpjve:.4f} | Accuracy: {acc:.4f}")
         
 if __name__ == "__main__":
     evaluate()

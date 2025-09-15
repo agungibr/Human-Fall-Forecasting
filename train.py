@@ -24,10 +24,15 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
 # -------------------------
-# MPJPE Metric
+# MPJPE & MPJVE Metric
 # -------------------------
 def mpjpe(pred, target):
     return torch.mean(torch.norm(pred - target, dim=-1))
+
+def mpjve(pred, target):
+    pred_vel = pred[:, 1:] - pred[:, :-1]
+    target_vel = target[:, 1:] - target[:, :-1]
+    return torch.mean(torch.norm(pred_vel - target_vel, dim=-1))
 
 model_name = "stgcn"  
 batch_size = 64
@@ -53,6 +58,7 @@ def train(model, train_loader, num_epochs=10, lr=1e-4, model_name="default_model
         total_loss, total_loss_f, total_loss_c = 0.0, 0.0, 0.0
         correct, total = 0, 0
         all_mpjpe = []
+        all_mpjve = []
 
         y_true_epoch, y_pred_epoch = [], []
 
@@ -61,7 +67,12 @@ def train(model, train_loader, num_epochs=10, lr=1e-4, model_name="default_model
             trg_forecast = trg_forecast.to(device)
             trg_class = trg_class.to(device)
 
-            src = src.view(src.size(0), src.size(1), -1)
+            if model_name == "stgcn":
+                src = src.permute(0, 3, 1, 2) 
+                src = src.unsqueeze(-1)     
+            else:
+                src = src.view(src.size(0), src.size(1), -1)
+
             trg_forecast = trg_forecast.view(trg_forecast.size(0), trg_forecast.size(1), -1)
 
             optimizer.zero_grad()
@@ -79,6 +90,8 @@ def train(model, train_loader, num_epochs=10, lr=1e-4, model_name="default_model
             total_loss_c += loss_c.item() * src.size(0)
 
             all_mpjpe.append(mpjpe(forecast_out, trg_forecast).item())
+            all_mpjve.append(mpjve(forecast_out, trg_forecast).item())
+
             preds = torch.argmax(class_out, dim=1)
             labels = torch.argmax(trg_class, dim=1)
             correct += (preds == torch.argmax(trg_class, dim=1)).sum().item()
@@ -94,12 +107,13 @@ def train(model, train_loader, num_epochs=10, lr=1e-4, model_name="default_model
         avg_loss_f = total_loss_f / total
         avg_loss_c = total_loss_c / total
         avg_mpjpe = sum(all_mpjpe) / len(all_mpjpe)
+        avg_mpjve = sum(all_mpjve) / len(all_mpjve)
         acc = correct / total
 
         epoch_losses.append(avg_loss)
 
         print(f"[Epoch {epoch+1}] Train → Loss: {avg_loss:.4f} | Forecast: {avg_loss_f:.4f} | "
-              f"Class: {avg_loss_c:.4f} | MPJPE: {avg_mpjpe:.4f} | Acc: {acc:.4f}")
+              f"Class: {avg_loss_c:.4f} | MPJPE: {avg_mpjpe:.4f} | MPJVE: {avg_mpjve:.4f} | Acc: {acc:.4f}")
         
         cm = confusion_matrix(y_true_epoch, y_pred_epoch)
         print(f"[Epoch {epoch+1}] Confusion Matrix:\n{cm}")
@@ -228,11 +242,12 @@ if __name__ == "__main__":
         )
 
     elif model_name == "stgcn":
-        from models.stgcn import STGCNModel
+        from models.stgcn import STGCNModel 
         model = STGCNModel(
-            in_channels=2,
-            num_class=2,
-            graph_args={'layout': 'openpose'},
+            in_channels=2, 
+            forecast_window=input_window,
+            output_class_size=2, 
+            graph_args={'layout': 'custom_17', 'strategy': 'spatial'},
             edge_importance_weighting=True
         )
 
