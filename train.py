@@ -35,7 +35,7 @@ def mpjve(pred, target):
     return torch.mean(torch.norm(pred_vel - target_vel, dim=-1))
 
 model_name = "stgcn"  
-batch_size = 64
+batch_size = 32
 num_epochs = 1000
 lr = 0.0001
 
