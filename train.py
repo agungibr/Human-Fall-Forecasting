@@ -248,7 +248,8 @@ if __name__ == "__main__":
             forecast_window=input_window,
             output_class_size=2, 
             graph_args={'layout': 'custom_17', 'strategy': 'spatial'},
-            edge_importance_weighting=True
+            edge_importance_weighting=True,
+            dropout=0.5 
         )
 
     else:
@@ -257,6 +258,4 @@ if __name__ == "__main__":
     model.to(device)
 
     print(f"Using model: {model_name.upper()}")
-
-    # Train and save model
     train(model, train_loader, num_epochs=num_epochs, lr=lr, model_name=model_name)
