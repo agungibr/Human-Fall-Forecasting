@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from .utils.graph import Graph
 
-# --- A simple self-attention module ---
+# self-attention module
 class Attention(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
@@ -58,26 +58,35 @@ class STGCNModel(nn.Module):
         self.register_buffer('A', A)
 
         spatial_kernel_size = A.size(0)
-        temporal_kernel_size = 9
-        kernel_size = (temporal_kernel_size, spatial_kernel_size)
+        
+        temporal_kernel_sizes = [5, 5, 7, 7, 9, 9, 11, 11, 11, 11]
         
         self.data_bn = nn.BatchNorm1d(in_channels * self.graph.num_node)
         
         kwargs0 = {k: v for k, v in kwargs.items() if k != 'dropout'}
         
-        # Using the smaller 512-feature architecture
-        self.st_gcn_networks = nn.ModuleList((
-            st_gcn(in_channels, 64, kernel_size, 1, residual=False, **kwargs0),
-            st_gcn(64, 64, kernel_size, 1, **kwargs),
-            st_gcn(64, 128, kernel_size, 1, **kwargs),
-            st_gcn(128, 128, kernel_size, 1, **kwargs),
-            st_gcn(128, 256, kernel_size, 2, **kwargs), # Stride=2 for downsampling
-            st_gcn(256, 256, kernel_size, 1, **kwargs),
-            st_gcn(256, 256, kernel_size, 1, **kwargs),
-            st_gcn(256, 512, kernel_size, 2, **kwargs), # Stride=2 for downsampling
-            st_gcn(512, 512, kernel_size, 1, **kwargs),
-            st_gcn(512, 512, kernel_size, 1, **kwargs),
-        ))
+        self.st_gcn_networks = nn.ModuleList()
+        
+        # Layer configurations: (in_channels, out_channels, stride)
+        layer_configs = [
+            (in_channels, 64, 1, False),
+            (64, 64, 1, True),
+            (64, 128, 1, True),
+            (128, 128, 1, True),
+            (128, 256, 2, True), # Stride=2 for downsampling
+            (256, 256, 1, True),
+            (256, 256, 1, True),
+            (256, 512, 2, True), # Stride=2 for downsampling
+            (512, 512, 1, True),
+            (512, 512, 1, True)
+        ]
+
+        for i, (in_c, out_c, stride, residual) in enumerate(layer_configs):
+            kernel_size = (temporal_kernel_sizes[i], spatial_kernel_size)
+            current_kwargs = kwargs0 if i == 0 else kwargs
+            self.st_gcn_networks.append(
+                st_gcn(in_c, out_c, kernel_size, stride, residual=residual, **current_kwargs)
+            )
 
         if edge_importance_weighting:
             self.edge_importance = nn.ParameterList([
