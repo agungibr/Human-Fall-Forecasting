@@ -17,6 +17,37 @@ class STGCNModel(nn.Module):
         **kwargs (optional): Other parameters for graph convolution units
     """
 
+class Attention(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        # Query, Key, Value transformations
+        self.query = nn.Conv1d(in_channels, in_channels // 8, 1)
+        self.key = nn.Conv1d(in_channels, in_channels // 8, 1)
+        self.value = nn.Conv1d(in_channels, in_channels, 1)
+        self.gamma = nn.Parameter(torch.zeros(1)) # Learnable scaling factor
+
+    def forward(self, x):
+        # x shape: (N, C, T, V)
+        N, C, T, V = x.size()
+        # Reshape for 1D convolution and attention calculation
+        x_flat = x.view(N, C, T * V)
+
+        # Generate Query, Key, Value
+        q = self.query(x_flat).permute(0, 2, 1) # (N, T*V, C')
+        k = self.key(x_flat) # (N, C', T*V)
+        v = self.value(x_flat) # (N, C, T*V)
+
+        # Calculate attention map (dot product of Query and Key)
+        attention_map = torch.bmm(q, k) # (N, T*V, T*V)
+        attention_map = F.softmax(attention_map, dim=-1) # Normalize to get weights
+
+        # Apply attention weights to Value
+        attended_features = torch.bmm(v, attention_map.permute(0, 2, 1))
+        attended_features = attended_features.view(N, C, T, V) # Reshape back
+
+        # Add a residual connection and scale
+        return x + self.gamma * attended_features
+
     def __init__(self, in_channels, forecast_window, output_class_size,
                  graph_args, edge_importance_weighting, **kwargs):
         super().__init__()
@@ -35,18 +66,16 @@ class STGCNModel(nn.Module):
         kwargs0 = {k: v for k, v in kwargs.items() if k != 'dropout'}
 
         self.st_gcn_networks = nn.ModuleList((
-            # Pass kwargs without dropout to the first layer if you want less regularization at the start
-            st_gcn(in_channels, 128, kernel_size, 1, residual=False, **kwargs0),
-            # Pass all kwargs (including dropout) to the rest of the layers
+            st_gcn(in_channels, 64, kernel_size, 1, residual=False, **kwargs0),
+            st_gcn(64, 64, kernel_size, 1, **kwargs),
+            st_gcn(64, 128, kernel_size, 1, **kwargs),
             st_gcn(128, 128, kernel_size, 1, **kwargs),
-            st_gcn(128, 128, kernel_size, 1, **kwargs),
-            st_gcn(128, 256, kernel_size, 1, **kwargs),
-            st_gcn(256, 256, kernel_size, 2, **kwargs),
-            st_gcn(256, 512, kernel_size, 1, **kwargs),
+            st_gcn(128, 256, kernel_size, 2, **kwargs), # Stride=2 for downsampling
+            st_gcn(256, 256, kernel_size, 1, **kwargs),
+            st_gcn(256, 256, kernel_size, 1, **kwargs),
+            st_gcn(256, 512, kernel_size, 2, **kwargs), # Stride=2 for downsampling
             st_gcn(512, 512, kernel_size, 1, **kwargs),
-            st_gcn(512, 1024, kernel_size, 2, **kwargs),
-            st_gcn(1024, 1024, kernel_size, 1, **kwargs),
-            st_gcn(1024, 1024, kernel_size, 1, **kwargs),
+            st_gcn(512, 512, kernel_size, 1, **kwargs),
         ))
 
         if edge_importance_weighting:
@@ -57,24 +86,33 @@ class STGCNModel(nn.Module):
         else:
             self.edge_importance = [1] * len(self.st_gcn_networks)
 
-        final_feature_dim = 1024
+        final_feature_dim = 512
+
+        self.attention = Attention(final_feature_dim)
         forecast_output_dim = forecast_window * self.graph.num_node * 2
-        self.fc_forecast = nn.Linear(final_feature_dim, forecast_output_dim)
+        self.fc_forecast = nn.Sequential(
+            nn.Linear(final_feature_dim, 1024),
+            nn.ReLU(),
+            nn.Dropout(kwargs.get('dropout', 0.5)),
+            nn.Linear(1024, forecast_output_dim)
+        )
+
         self.fc_class = nn.Linear(final_feature_dim, output_class_size)
 
     def forward(self, x):
         N, C, T, V, M = x.size()
-        x = x.permute(0, 4, 3, 1, 2).contiguous()
-        x = x.view(N * M, V * C, T)
+        x = x.permute(0, 4, 3, 1, 2).contiguous().view(N * M, V * C, T)
         x = self.data_bn(x)
-        x = x.view(N, M, V, C, T)
-        x = x.permute(0, 1, 3, 4, 2).contiguous()
-        x = x.view(N * M, C, T, V)
+        x = x.view(N, M, V, C, T).permute(0, 1, 3, 4, 2).contiguous().view(N * M, C, T, V)
 
         for gcn, importance in zip(self.st_gcn_networks, self.edge_importance):
             x, _ = gcn(x, self.A * importance)
-
+        
+        # Use Attention instead of AvgPool
+        x = self.attention(x)
+        # After attention, we still need to pool to get a single summary vector
         x = F.avg_pool2d(x, x.size()[2:])
+        
         x = x.view(N, M, -1).mean(dim=1)
 
         forecast = self.fc_forecast(x)
