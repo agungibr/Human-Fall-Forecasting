@@ -4,19 +4,7 @@ import torch.nn.functional as F
 
 from .utils.graph import Graph
 
-class STGCNModel(nn.Module):
-    r"""Spatial temporal graph convolutional networks adapted for dual-task learning.
-
-    Args:
-        in_channels (int): Number of channels in the input data (e.g., 2 for (x, y))
-        graph_args (dict): The arguments for building the graph
-        forecast_window (int): The number of future frames to predict
-        output_class_size (int): Number of classes for the classification task
-        edge_importance_weighting (bool): If ``True``, adds a learnable
-            importance weighting to the edges of the graph
-        **kwargs (optional): Other parameters for graph convolution units
-    """
-
+# --- A simple self-attention module ---
 class Attention(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
@@ -48,6 +36,19 @@ class Attention(nn.Module):
         # Add a residual connection and scale
         return x + self.gamma * attended_features
 
+
+class STGCNModel(nn.Module):
+    r"""Spatial temporal graph convolutional networks adapted for dual-task learning.
+
+    Args:
+        in_channels (int): Number of channels in the input data (e.g., 2 for (x, y))
+        graph_args (dict): The arguments for building the graph
+        forecast_window (int): The number of future frames to predict
+        output_class_size (int): Number of classes for the classification task
+        edge_importance_weighting (bool): If ``True``, adds a learnable
+            importance weighting to the edges of the graph
+        **kwargs (optional): Other parameters for graph convolution units
+    """
     def __init__(self, in_channels, forecast_window, output_class_size,
                  graph_args, edge_importance_weighting, **kwargs):
         super().__init__()
@@ -62,9 +63,9 @@ class Attention(nn.Module):
         
         self.data_bn = nn.BatchNorm1d(in_channels * self.graph.num_node)
         
-        # We need to separate the dropout argument to pass it to the st_gcn layers.
         kwargs0 = {k: v for k, v in kwargs.items() if k != 'dropout'}
-
+        
+        # Using the smaller 512-feature architecture
         self.st_gcn_networks = nn.ModuleList((
             st_gcn(in_channels, 64, kernel_size, 1, residual=False, **kwargs0),
             st_gcn(64, 64, kernel_size, 1, **kwargs),
@@ -85,10 +86,11 @@ class Attention(nn.Module):
             ])
         else:
             self.edge_importance = [1] * len(self.st_gcn_networks)
-
+        
         final_feature_dim = 512
-
+        
         self.attention = Attention(final_feature_dim)
+        
         forecast_output_dim = forecast_window * self.graph.num_node * 2
         self.fc_forecast = nn.Sequential(
             nn.Linear(final_feature_dim, 1024),
@@ -108,9 +110,7 @@ class Attention(nn.Module):
         for gcn, importance in zip(self.st_gcn_networks, self.edge_importance):
             x, _ = gcn(x, self.A * importance)
         
-        # Use Attention instead of AvgPool
         x = self.attention(x)
-        # After attention, we still need to pool to get a single summary vector
         x = F.avg_pool2d(x, x.size()[2:])
         
         x = x.view(N, M, -1).mean(dim=1)
