@@ -16,7 +16,7 @@ from models.mlp import MLP
 from models.gru import GRUModel
 from models.rnn import RNNModel
 from models.lstm import LSTMModel
-from models.stgcn import STGCNModel
+from models.stgcn import STGCN
 from models.tiny_transformer import TinyTransformerModel
 from sklearn.metrics import confusion_matrix, accuracy_score
 
@@ -35,14 +35,14 @@ def mpjve(pred, target):
     return torch.mean(torch.norm(pred_vel - target_vel, dim=-1))
 
 model_name = "stgcn"  
-batch_size = 32
+batch_size = 64
 num_epochs = 1000
 lr = 0.0001
 
 # -------------------------
 # Training Loop
 # -------------------------
-def train(model, train_loader, num_epochs=10, lr=1e-4, model_name="default_model"):
+def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_model"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -191,6 +191,9 @@ if __name__ == "__main__":
 
     input_window = len(train_data["src"][0])  # e.g. 15
     keypoints_dim = len(train_data["src"][0][0]) * len(train_data["src"][0][0][0])  # 17 * 2 = 34
+    output_window = len(train_data["trg_forecast"][0])
+    num_keypoints = len(train_data["src"][0][0])
+    num_coords = len(train_data["src"][0][0][0])
 
     if model_name == "mlp":
         from models.mlp import MLP
@@ -242,14 +245,14 @@ if __name__ == "__main__":
         )
 
     elif model_name == "stgcn":
-        from models.stgcn import STGCNModel 
-        model = STGCNModel(
-            in_channels=2, 
-            forecast_window=input_window,
-            output_class_size=2, 
-            graph_args={'layout': 'custom_17', 'strategy': 'spatial'},
-            edge_importance_weighting=True,
-            dropout=0.5 
+        from models.stgcn import STGCN
+        graph_args = {'layout': 'coco', 'strategy': 'spatial'}
+        model = STGCN(
+            in_channels=num_coords,
+            num_class=2,
+            graph_args=graph_args,
+            forecast_window=output_window,
+            edge_importance_weighting=True
         )
 
     else:

@@ -15,7 +15,7 @@ from collections import defaultdict, Counter
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from models.tiny_transformer import TinyTransformerModel
-from models.stgcn import STGCNModel
+from models.stgcn import STGCN
 from models.lstm import LSTMModel
 from models.rnn import RNNModel
 from models.gru import GRUModel
@@ -131,6 +131,9 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
 
     input_window = len(test_data["src"][0])
     keypoints_dim = len(test_data["src"][0][0]) * len(test_data["src"][0][0][0])
+    num_coords = len(test_data["src"][0][0][0])
+    output_window = len(test_data["trg_forecast"][0])
+    graph_args = {'layout': 'coco', 'strategy': 'spatial'}
 
     if model_name == "mlp":
         model = MLP(input_size=input_window * keypoints_dim, hidden_size=128, forecast_window=input_window, output_class_size=2)
@@ -153,13 +156,12 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         )
         
     elif model_name == "stgcn":
-        model = STGCNModel(
-            in_channels=2, 
-            forecast_window=input_window,
-            output_class_size=2, 
-            graph_args={'layout': 'custom_17', 'strategy': 'spatial'},
-            edge_importance_weighting=True,
-            dropout=0.5 
+        model = STGCN(
+            in_channels=num_coords,
+            num_class=2,
+            graph_args=graph_args,
+            forecast_window=output_window,
+            edge_importance_weighting=True
         )
     else:
         raise ValueError(f"Unknown model name: {model_name}")
