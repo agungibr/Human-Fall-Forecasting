@@ -35,7 +35,7 @@ def mpjve(pred, target):
     return torch.mean(torch.norm(pred_vel - target_vel, dim=-1))
 
 model_name = "stgcn"  
-batch_size = 64
+batch_size = 128
 num_epochs = 1000
 lr = 0.0001
 
@@ -48,6 +48,7 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loss_forecast = nn.MSELoss()
     loss_class = nn.CrossEntropyLoss()
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.5)
 
     epoch_losses = []
     start_time = time.time()
@@ -80,7 +81,10 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
 
             loss_f = loss_forecast(forecast_out, trg_forecast)
             loss_c = loss_class(class_out, torch.argmax(trg_class, dim=1))
-            loss = loss_f + loss_c
+            #loss = loss_f + loss_c
+
+            lambda_weight = 0.7
+            loss = (lambda_weight * loss_f) + ((1 - lambda_weight) * loss_c)
 
             loss.backward()
             optimizer.step()
@@ -109,6 +113,8 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
         avg_mpjpe = sum(all_mpjpe) / len(all_mpjpe)
         avg_mpjve = sum(all_mpjve) / len(all_mpjve)
         acc = correct / total
+
+        scheduler.step(avg_loss)
 
         epoch_losses.append(avg_loss)
 
