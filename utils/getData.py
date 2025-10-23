@@ -7,7 +7,7 @@ from ultralytics import YOLO
 from torch.utils.data import Dataset
 
 class getData(Dataset):
-    def __init__(self, folder="../../frames/", input_window=15, output_window=15, step=5,
+    def __init__(self, folder="/media/agung/0EDE1921DE19029F/telkom/centive/motion/Human-Fall-Forecasting/frames/", input_window=15, output_window=15, step=5,
                  pkl=True, pkl_path="../dataset.pkl"):
         self.src = []
         self.trg_forecast = []
@@ -67,7 +67,7 @@ class getData(Dataset):
 
                     for frame in frames:
                         keypoints = []
-                        output = model(frame, save=False, verbose=False)
+                        output = model(frame, save=False, verbose=False, conf=0.1)
                         if output and output[0].keypoints is not None and len(output[0].keypoints) > 0:
                             kpt_data = output[0].keypoints.data[0]  # (17, 3)
                             for kp in kpt_data:
@@ -80,13 +80,24 @@ class getData(Dataset):
                         keypoints_in_video.append(keypoints)
 
                     print(f"[INFO] {subject_type}/{subject}/{motion} → Failed frames: {failed_count}")
+                
+                    keypoints_np = np.array(keypoints_in_video, dtype=np.float32)     
+                    velocities_np = np.zeros_like(keypoints_np)
+                    
+                    if keypoints_np.shape[0] > 1:
+                        velocities_np[1:] = keypoints_np[1:] - keypoints_np[:-1]
+
+                    combined_features = np.concatenate([keypoints_np, velocities_np], axis=-1)
+                    features_in_video = [frame_features.tolist() for frame_features in combined_features]
 
                     subject_key = f"{subject}"
 
                     # Sliding window with labels
-                    for slider in range(0, len(keypoints_in_video) - input_window - output_window + 1, step):
-                        src_seq = keypoints_in_video[slider:slider + input_window]
+                    for slider in range(0, len(features_in_video) - input_window - output_window + 1, step):
+                        src_seq = features_in_video[slider:slider + input_window]
+
                         trg_seq = keypoints_in_video[slider + input_window:slider + input_window + output_window]
+                        
                         class_seq = labels[slider + input_window:slider + input_window + output_window]
 
                         majority_label = int(np.round(np.mean(class_seq)))
