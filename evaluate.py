@@ -131,8 +131,9 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
 
     input_window = len(test_data["src"][0])
     keypoints_dim = len(test_data["src"][0][0]) * len(test_data["src"][0][0][0])
-    num_coords = len(test_data["src"][0][0][0])
+    num_coords = len(test_data["src"][0][0][0]) 
     output_window = len(test_data["trg_forecast"][0])
+    num_forecast_coords = len(test_data["trg_forecast"][0][0][0]) 
     graph_args = {'layout': 'coco', 'strategy': 'spatial'}
 
     if model_name == "mlp":
@@ -161,6 +162,7 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
             num_class=2,
             graph_args=graph_args,
             forecast_window=output_window,
+            forecast_channels=num_forecast_coords,
             edge_importance_weighting=True
         )
     else:

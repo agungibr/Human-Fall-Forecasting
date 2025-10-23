@@ -128,7 +128,7 @@ class ST_GCN_block(nn.Module):
         return self.relu(x)
 
 class STGCN(nn.Module):
-    def __init__(self, in_channels, num_class, graph_args, forecast_window, edge_importance_weighting=True):
+    def __init__(self, in_channels, num_class, graph_args, forecast_window, forecast_channels=2, edge_importance_weighting=True):
         super().__init__()
         self.graph = Graph(**graph_args)
         A = torch.tensor(self.graph.A, dtype=torch.float32, requires_grad=False)
@@ -150,7 +150,7 @@ class STGCN(nn.Module):
         else:
             self.edge_importance = [1] * len(self.st_gcn_networks)
         self.fc_shared = nn.Linear(256, 512)
-        self.fc_forecast = nn.Linear(512, forecast_window * self.graph.num_node * in_channels)
+        self.fc_forecast = nn.Linear(512, forecast_window * self.graph.num_node * forecast_channels)
         self.forecast_window = forecast_window
         self.fc_class = nn.Linear(512, num_class)
 

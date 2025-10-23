@@ -35,7 +35,7 @@ def mpjve(pred, target):
     return torch.mean(torch.norm(pred_vel - target_vel, dim=-1))
 
 model_name = "stgcn"  
-batch_size = 128
+batch_size = 2
 num_epochs = 1000
 lr = 0.0001
 
@@ -194,6 +194,7 @@ if __name__ == "__main__":
     output_window = len(train_data["trg_forecast"][0])
     num_keypoints = len(train_data["src"][0][0])
     num_coords = len(train_data["src"][0][0][0])
+    num_forecast_coords = len(train_data["trg_forecast"][0][0][0])
 
     if model_name == "mlp":
         from models.mlp import MLP
@@ -248,10 +249,11 @@ if __name__ == "__main__":
         from models.stgcn import STGCN
         graph_args = {'layout': 'coco', 'strategy': 'spatial'}
         model = STGCN(
-            in_channels=num_coords,
+            in_channels=num_coords,             # Input channels = 4
             num_class=2,
             graph_args=graph_args,
             forecast_window=output_window,
+            forecast_channels=num_forecast_coords, # Output channels = 2
             edge_importance_weighting=True
         )
 
