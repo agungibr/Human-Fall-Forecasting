@@ -3,7 +3,11 @@ import os
 import torch
 import pickle
 import numpy as np
+import seaborn as sns
 from torch.utils.data import DataLoader
+from sklearn.metrics import confusion_matrix
+
+# Make sure train is imported to get mpjpe
 from train import mpjpe, mpjve
 from utils.dataset import PoseDataset
 
@@ -26,6 +30,7 @@ SKELETON_EDGES = [
     (7, 9), (6, 8), (8, 10), (11, 13), (13, 15), (12, 14), (14, 16), (0, 5), (0, 6)
 ]
 
+# --- (draw_pose, visualize_single_frame, and visualize_cross_windows functions are unchanged) ---
 def draw_pose(ax, pose, color, alpha=1.0, linewidth=2):
     for (i, j) in SKELETON_EDGES:
         if i < pose.shape[0] and j < pose.shape[0]:
@@ -96,16 +101,29 @@ def visualize_cross_windows(pred_batch, tgt_batch, model_name, batch_idx=0, star
     plt.savefig(save_path, bbox_inches='tight', dpi=600); plt.close()
     print(f"[INFO] Saved cross-window visualization to {save_path}")
 
-
+# --- NEW FUNCTION: Plot Confusion Matrix ---
+def plot_confusion_matrix(y_true, y_pred, model_name):
+    """Generates and saves a confusion matrix plot."""
+    cm = confusion_matrix(y_true, y_pred)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, 
+                xticklabels=['Non-Fall', 'Fall'], yticklabels=['Non-Fall', 'Fall'])
+    ax.set_title(f'Confusion Matrix - {model_name.upper()}', fontsize=16)
+    ax.set_xlabel('Predicted Label', fontsize=12)
+    ax.set_ylabel('True Label', fontsize=12)
+    plt.tight_layout()
+    save_path = f"results/plots/confusion_matrix_{model_name}.png"
+    plt.savefig(save_path, dpi=600)
+    plt.close()
+    print(f"[INFO] Saved confusion matrix to {save_path}")
+    
 def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, visualize_motion="5_forward_falls"):
+    # ... (code for setting up device, model_name, and loading data is unchanged) ...
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     model_name = os.path.basename(model_path).split('_')[0]
     print(f"[INFO] Evaluating model: {model_name.upper()}")
-
     with open(os.path.join(os.path.dirname(__file__), "dataset.pkl"), "rb") as f:
         raw_data = pickle.load(f)
-
     subjects = raw_data["subjects"]
     motion_types = raw_data["motion_types"]
     unique_subjects = sorted(set(subjects))
@@ -118,7 +136,6 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
             test_data["motion_types"].append(raw_data["motion_types"][i])
     test_dataset = PoseDataset(test_data, return_subject=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-    
     subject_motion_windows = defaultdict(Counter)
     for _, _, subjects, motions in test_loader:
         for subj, motion in zip(subjects, motions):
@@ -128,14 +145,14 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         print(f"{subj}:")
         for motion, count in subject_motion_windows[subj].items():
             print(f"  - {motion}: {count} sliding windows")
-
+    
+    # ... (code for defining dimensions and initializing models is unchanged) ...
     input_window = len(test_data["src"][0])
     keypoints_dim = len(test_data["src"][0][0]) * len(test_data["src"][0][0][0])
     num_coords = len(test_data["src"][0][0][0]) 
     output_window = len(test_data["trg_forecast"][0])
     num_forecast_coords = len(test_data["trg_forecast"][0][0][0]) 
     graph_args = {'layout': 'coco', 'strategy': 'spatial'}
-
     if model_name == "mlp":
         model = MLP(input_size=input_window * keypoints_dim, hidden_size=128, forecast_window=input_window, output_class_size=2)
     elif model_name == "rnn":
@@ -146,23 +163,13 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         model = GRUModel(input_size=34, hidden_size=128, forecast_window=input_window, output_class_size=2)
     elif model_name == "tiny_transformer":
         model = TinyTransformerModel(
-            input_size=34, 
-            forecast_window=input_window, 
-            output_class_size=2, 
-            d_model=64, 
-            nhead=4, 
-            num_layers=2, 
-            dim_feedforward=128, 
-            dropout=0.1
+            input_size=34, forecast_window=input_window, output_class_size=2, d_model=64, 
+            nhead=4, num_layers=2, dim_feedforward=128, dropout=0.1
         )
-        
     elif model_name == "stgcn":
         model = STGCN(
-            in_channels=num_coords,
-            num_class=2,
-            graph_args=graph_args,
-            forecast_window=output_window,
-            forecast_channels=num_forecast_coords,
+            in_channels=num_coords, num_class=2, graph_args=graph_args,
+            forecast_window=output_window, forecast_channels=num_forecast_coords,
             edge_importance_weighting=True
         )
     else:
@@ -180,6 +187,9 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         all_mpjpe, all_mpjve = [], []
         visualized = False
         motion_forecast, motion_target = [], []
+        
+        # --- ADDED: Lists to store all predictions and labels for CM plot ---
+        all_preds, all_labels = [], []
 
         for idx, batch in enumerate(test_loader):
             if len(batch) == 4:
@@ -191,23 +201,25 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
             src, trg_forecast, trg_class = src.to(device), trg_forecast.to(device), trg_class.to(device)
 
             if model_name == "stgcn":
+                # The .unsqueeze(-1) was missing here
                 src = src.permute(0, 3, 1, 2).unsqueeze(-1)
             else:
                 src = src.view(src.size(0), src.size(1), -1)
 
             trg_forecast = trg_forecast.view(trg_forecast.size(0), trg_forecast.size(1), -1)
-
             forecast_out, class_out = model(src)
-
             loss_f = loss_forecast(forecast_out, trg_forecast)
             loss_c = loss_class(class_out, torch.argmax(trg_class, dim=1))
-
             total_loss_f += loss_f.item() * src.size(0)
             total_loss_c += loss_c.item() * src.size(0)
-
-            pred = torch.argmax(class_out, dim=1)
-            correct += (pred == torch.argmax(trg_class, dim=1)).sum().item()
+            preds = torch.argmax(class_out, dim=1)
+            labels = torch.argmax(tr_class, dim=1) # Corrected typo here
+            correct += (preds == labels).sum().item()
             total += trg_class.size(0)
+            
+            # --- ADDED: Store predictions and labels ---
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
 
             all_mpjpe.append(mpjpe(forecast_out, trg_forecast).item())
             all_mpjve.append(mpjve(forecast_out, trg_forecast).item())
@@ -219,16 +231,14 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
                     motion_forecast.append(forecast_out[i:i+1].cpu())
                     motion_target.append(trg_forecast[i:i+1].cpu())
 
-        # Visualization logic
+        # ... (visualization logic is unchanged) ...
         if motion_forecast:
             pred_all = torch.cat(motion_forecast, dim=0).numpy()
             target_all = torch.cat(motion_target, dim=0).numpy()
-            
             if not visualized:
                 print(f"[INFO] Visualizing full motion: {visualize_motion} with {pred_all.shape[0]} windows")
                 visualize_cross_windows(pred_all, target_all, model_name=model_name, frame_stride=15)
                 visualized = True
-
             if pred_all.shape[0] > 36:
                 visualize_single_frame(pred_all, target_all, model_name=model_name, window_idx=36)
             else:
@@ -245,6 +255,9 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         print(f"\n[Evaluation Results for {model_path}]")
         print(f"Forecast Loss: {avg_loss_f:.4f} | Class Loss: {avg_loss_c:.4f} | "
               f"MPJPE: {avg_mpjpe:.4f} | MPJVE: {avg_mpjve:.4f} | Accuracy: {acc:.4f}")
+
+        # --- ADDED: Call the plotting function ---
+        plot_confusion_matrix(all_labels, all_preds, model_name)
 
 if __name__ == "__main__":
     evaluate()
