@@ -38,6 +38,7 @@ model_name = "stgcn"
 batch_size = 32
 num_epochs = 1000
 lr = 0.0001
+weight = 0.01
 
 # -------------------------
 # Training Loop
@@ -45,7 +46,7 @@ lr = 0.0001
 def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_model"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight)
     loss_forecast = nn.MSELoss()
     loss_class = nn.CrossEntropyLoss()
     
