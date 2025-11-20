@@ -11,17 +11,13 @@ class Graph:
         self.num_node = 17
         self.self_link = [(i, i) for i in range(self.num_node)]
         
+        # --- CORRECTED GRAPH FOR YOLO/COCO FORMAT ---
         self.inward = [
-            # Head & Torso (moving down to hip)
-            (10, 9), (9, 8), (8, 7), (7, 0),
-            # Left Arm (moving in to chest)
-            (13, 12), (12, 11), (11, 8),
-            # Right Arm (moving in to chest)
-            (16, 15), (15, 14), (14, 8),
-            # Left Leg (moving up to hip)
-            (6, 5), (5, 4), (4, 0),
-            # Right Leg (moving up to hip)
-            (3, 2), (2, 1), (1, 0)
+            (10, 9), (9, 8), (8, 7), (7, 0), # Head & Torso
+            (13, 12), (12, 11), (11, 8),     # Left Arm
+            (16, 15), (15, 14), (14, 8),     # Right Arm
+            (6, 5), (5, 4), (4, 0),          # Left Leg
+            (3, 2), (2, 1), (1, 0)           # Right Leg
         ]
         
         self.outward = [(j, i) for (i, j) in self.inward]
@@ -147,34 +143,33 @@ class STGCN(nn.Module):
         kernel_size = (temporal_kernel_size, spatial_kernel_size)
         self.data_bn = nn.BatchNorm1d(in_channels * A.size(1))
         
-        # Backbone: 64 -> 64 -> 128 -> 128 -> 256 -> 256
+        # --- 512 Channel Backbone ---
+        # Scaled up: 64 -> 128 -> 128 -> 256 -> 256 -> 512
         self.st_gcn_networks = nn.ModuleList((
             ST_GCN_block(in_channels, 64, kernel_size, spatial_kernel_size, stride=1, residual=False),
-            ST_GCN_block(64, 64, kernel_size, spatial_kernel_size, stride=1),
             ST_GCN_block(64, 128, kernel_size, spatial_kernel_size, stride=2),
             ST_GCN_block(128, 128, kernel_size, spatial_kernel_size, stride=1),
             ST_GCN_block(128, 256, kernel_size, spatial_kernel_size, stride=2),
             ST_GCN_block(256, 256, kernel_size, spatial_kernel_size, stride=1),
+            ST_GCN_block(256, 512, kernel_size, spatial_kernel_size, stride=2),
         ))
         
         if edge_importance_weighting:
             self.edge_importance = nn.ParameterList([nn.Parameter(torch.ones(self.A.size())) for i in self.st_gcn_networks])
         else:
             self.edge_importance = [1] * len(self.st_gcn_networks)
+            
+        # --- REVERTED TO SHARED ARCHITECTURE ---
         
-        # 1. Forecasting Head
-        # Input is now 256 (from the larger backbone)
-        self.head_forecast = nn.Linear(256, forecast_window * self.graph.num_node * forecast_channels)
+        # 1. Shared Bottleneck Layer (From 512 -> 256)
+        # This forces the model to learn features good for BOTH tasks
+        self.fc_shared = nn.Linear(512, 256)
+        
+        # 2. Heads (Both feed from fc_shared)
+        self.fc_forecast = nn.Linear(256, forecast_window * self.graph.num_node * forecast_channels)
         self.forecast_window = forecast_window
-
-        # 2. Classification Head
-        # Deeper, robust head with Dropout
-        self.head_class = nn.Sequential(
-            nn.Linear(256, 128),         # Compress 256 -> 128
-            nn.ReLU(inplace=True),
-            nn.Dropout(p=0.5),           # Prevent overfitting
-            nn.Linear(128, num_class)    # Final decision
-        )
+        
+        self.fc_class = nn.Linear(256, num_class)
 
     def forward(self, x):
         N, C, T, V, M = x.size()
@@ -182,20 +177,18 @@ class STGCN(nn.Module):
         x = self.data_bn(x)
         x = x.view(N, M, V, C, T).permute(0, 1, 3, 4, 2).contiguous().view(N * M, C, T, V)
         
-        # Backbone
         for gcn, importance in zip(self.st_gcn_networks, self.edge_importance):
             x = gcn(x, self.A * importance)
             
-        # Global Pooling
+        # Global Pooling -> 512 Features
         x = F.avg_pool2d(x, x.size()[2:])
-        x = x.view(N, M, -1).mean(dim=1) # Shape: (N, 256)
-
+        x = x.view(N, M, -1).mean(dim=1)
         
-        # Path A: Forecast
-        forecast_out = self.head_forecast(x)
-        forecast_out = forecast_out.view(N, self.forecast_window, -1)
+        # Shared Layer -> 256 Features
+        x = F.relu(self.fc_shared(x))
         
-        # Path B: Classification
-        class_out = self.head_class(x)
+        # Unified Heads
+        forecast_out = self.fc_forecast(x).view(N, self.forecast_window, -1)
+        class_out = self.fc_class(x)
         
         return forecast_out, class_out
