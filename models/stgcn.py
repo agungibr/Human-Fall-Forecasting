@@ -10,14 +10,17 @@ class Graph:
     def __init__(self, layout='coco', strategy='spatial'):
         self.num_node = 17
         self.self_link = [(i, i) for i in range(self.num_node)]
-        
-        # --- CORRECTED GRAPH FOR YOLO/COCO FORMAT ---
         self.inward = [
-            (10, 9), (9, 8), (8, 7), (7, 0), # Head & Torso
-            (13, 12), (12, 11), (11, 8),     # Left Arm
-            (16, 15), (15, 14), (14, 8),     # Right Arm
-            (6, 5), (5, 4), (4, 0),          # Left Leg
-            (3, 2), (2, 1), (1, 0)           # Right Leg
+            # Head & Torso (moving down to hip)
+            (10, 9), (9, 8), (8, 7), (7, 0),
+            # Left Arm (moving in to chest)
+            (13, 12), (12, 11), (11, 8),
+            # Right Arm (moving in to chest)
+            (16, 15), (15, 14), (14, 8),
+            # Left Leg (moving up to hip)
+            (6, 5), (5, 4), (4, 0),
+            # Right Leg (moving up to hip)
+            (3, 2), (2, 1), (1, 0)
         ]
         
         self.outward = [(j, i) for (i, j) in self.inward]
@@ -143,15 +146,14 @@ class STGCN(nn.Module):
         kernel_size = (temporal_kernel_size, spatial_kernel_size)
         self.data_bn = nn.BatchNorm1d(in_channels * A.size(1))
         
-        # --- 512 Channel Backbone ---
-        # Scaled up: 64 -> 128 -> 128 -> 256 -> 256 -> 512
+        # Sequence: 64 -> 64 -> 128 -> 128 -> 256 -> 256
         self.st_gcn_networks = nn.ModuleList((
             ST_GCN_block(in_channels, 64, kernel_size, spatial_kernel_size, stride=1, residual=False),
+            ST_GCN_block(64, 64, kernel_size, spatial_kernel_size, stride=1),
             ST_GCN_block(64, 128, kernel_size, spatial_kernel_size, stride=2),
             ST_GCN_block(128, 128, kernel_size, spatial_kernel_size, stride=1),
             ST_GCN_block(128, 256, kernel_size, spatial_kernel_size, stride=2),
             ST_GCN_block(256, 256, kernel_size, spatial_kernel_size, stride=1),
-            ST_GCN_block(256, 512, kernel_size, spatial_kernel_size, stride=2),
         ))
         
         if edge_importance_weighting:
@@ -159,36 +161,23 @@ class STGCN(nn.Module):
         else:
             self.edge_importance = [1] * len(self.st_gcn_networks)
             
-        # --- REVERTED TO SHARED ARCHITECTURE ---
+        self.fc_shared = nn.Linear(256, 512)
         
-        # 1. Shared Bottleneck Layer (From 512 -> 256)
-        # This forces the model to learn features good for BOTH tasks
-        self.fc_shared = nn.Linear(512, 256)
-        
-        # 2. Heads (Both feed from fc_shared)
-        self.fc_forecast = nn.Linear(256, forecast_window * self.graph.num_node * forecast_channels)
+        # Output layers updated to accept 512 features
+        self.fc_forecast = nn.Linear(512, forecast_window * self.graph.num_node * forecast_channels)
         self.forecast_window = forecast_window
-        
-        self.fc_class = nn.Linear(256, num_class)
+        self.fc_class = nn.Linear(512, num_class)
 
     def forward(self, x):
         N, C, T, V, M = x.size()
         x = x.permute(0, 4, 3, 1, 2).contiguous().view(N * M, V * C, T)
         x = self.data_bn(x)
         x = x.view(N, M, V, C, T).permute(0, 1, 3, 4, 2).contiguous().view(N * M, C, T, V)
-        
         for gcn, importance in zip(self.st_gcn_networks, self.edge_importance):
             x = gcn(x, self.A * importance)
-            
-        # Global Pooling -> 512 Features
         x = F.avg_pool2d(x, x.size()[2:])
         x = x.view(N, M, -1).mean(dim=1)
-        
-        # Shared Layer -> 256 Features
         x = F.relu(self.fc_shared(x))
-        
-        # Unified Heads
         forecast_out = self.fc_forecast(x).view(N, self.forecast_window, -1)
         class_out = self.fc_class(x)
-        
         return forecast_out, class_out
