@@ -256,7 +256,6 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         print(f"Forecast Loss: {avg_loss_f:.4f} | Class Loss: {avg_loss_c:.4f} | "
               f"MPJPE: {avg_mpjpe:.4f} | MPJVE: {avg_mpjve:.4f} | Accuracy: {acc:.4f}")
 
-        # --- ADDED: Call the plotting function ---
         plot_confusion_matrix(all_labels, all_preds, model_name)
 
 if __name__ == "__main__":

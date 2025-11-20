@@ -133,7 +133,7 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
     # Plot and save loss curve
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, num_epochs + 1), epoch_losses, color='blue', linewidth=2)
-    plt.title("Training Loss Over Epochs", fontsize=14)
+    plt.title("Training Loss Over Epochs STGCN", fontsize=14)
     plt.xlabel("Epoch", fontsize=12)
     plt.ylabel("Total Loss", fontsize=12)
     plt.grid(True)
@@ -141,19 +141,6 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
     loss_plot_path = f"results/plots/{model_name}_loss_curve_{num_epochs}.png"
     plt.savefig(loss_plot_path, dpi=600)
     print(f"[INFO] Loss curve saved to {loss_plot_path}")
-    plt.close() 
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(range(1, num_epochs + 1), epoch_accuracies, color='green', linewidth=2)
-    plt.title("Training Accuracy Over Epochs", fontsize=14)
-    plt.xlabel("Epoch", fontsize=12)
-    plt.ylabel("Accuracy", fontsize=12)
-    plt.ylim(0, 1.05) 
-    plt.grid(True)
-    plt.tight_layout()
-    acc_plot_path = f"results/plots/{model_name}_accuracy_curve_{num_epochs}.png"
-    plt.savefig(acc_plot_path, dpi=600)
-    print(f"[INFO] Accuracy curve saved to {acc_plot_path}")
     plt.close() 
 
 # -------------------------

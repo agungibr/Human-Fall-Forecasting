@@ -7,7 +7,7 @@ from ultralytics import YOLO
 from torch.utils.data import Dataset
 
 class getData(Dataset):
-    def __init__(self, folder="/media/agung/0EDE1921DE19029F/telkom/centive/motion/Human-Fall-Forecasting/frames/", input_window=15, output_window=15, step=5,
+    def __init__(self, folder="/media/agung/0EDE1921DE19029F/telkom/centive/motion/Human-Fall-Forecasting/frames/", input_window=30, output_window=15, step=5,
                  pkl=True, pkl_path="../dataset.pkl"):
         self.src = []
         self.trg_forecast = []

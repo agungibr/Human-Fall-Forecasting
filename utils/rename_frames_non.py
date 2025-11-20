@@ -38,6 +38,4 @@ def rename_frames_to_zero(folder_path):
 
     print(f"[INFO] {renamed_count} frame dilabeli 0 di: {folder_path}")
 
-
-# ✅ Jalankan fungsi utama
 label_all_fall_frames_zero()
