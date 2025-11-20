@@ -4,18 +4,17 @@ import torch.nn.functional as F
 import numpy as np
 
 class Graph:
-    """
-    The Graph to model the skeletons of human body/pose.
-    """
     def __init__(self, layout='coco', strategy='spatial'):
         self.num_node = 17
         self.self_link = [(i, i) for i in range(self.num_node)]
         self.inward = [
-            (10, 8), (8, 6), (9, 7), (7, 5), # Arms
-            (4, 2), (2, 0), (3, 1), (1, 0), # Legs
-            (12, 11), (11, 5), (12, 6), (11, 13), (13, 15), (12, 14), (14, 16),
-            (6, 5) # Torso
+            (10, 9), (9, 8), (8, 7), (7, 0), # Head & Torso 
+            (13, 12), (12, 11), (11, 8), # Left Arm 
+            (16, 15), (15, 14), (14, 8), # Right Arm
+            (6, 5), (5, 4), (4, 0), # Left Leg
+            (3, 2), (2, 1), (1, 0) # Right Leg
         ]
+        
         self.outward = [(j, i) for (i, j) in self.inward]
         self.neighbor = self.inward + self.outward
         self.distance_matrix = self._get_distance_matrix()
@@ -137,22 +136,33 @@ class STGCN(nn.Module):
         temporal_kernel_size = 9
         kernel_size = (temporal_kernel_size, spatial_kernel_size)
         self.data_bn = nn.BatchNorm1d(in_channels * A.size(1))
+        
+        # --- CHANGED: Reduced channel sizes (approx 4x smaller model) ---
+        # Original sequence: 64 -> 64 -> 64 -> 64 -> 128 -> 128 -> 256 -> 256
+        # New sequence:      32 -> 32 -> 64 -> 64 -> 128 -> 128
+        
         self.st_gcn_networks = nn.ModuleList((
-            ST_GCN_block(in_channels, 64, kernel_size, spatial_kernel_size, stride=1, residual=False),
+            ST_GCN_block(in_channels, 32, kernel_size, spatial_kernel_size, stride=1, residual=False),
+            ST_GCN_block(32, 32, kernel_size, spatial_kernel_size, stride=1),
+            ST_GCN_block(32, 64, kernel_size, spatial_kernel_size, stride=2),
             ST_GCN_block(64, 64, kernel_size, spatial_kernel_size, stride=1),
             ST_GCN_block(64, 128, kernel_size, spatial_kernel_size, stride=2),
             ST_GCN_block(128, 128, kernel_size, spatial_kernel_size, stride=1),
-            ST_GCN_block(128, 256, kernel_size, spatial_kernel_size, stride=2),
-            ST_GCN_block(256, 256, kernel_size, spatial_kernel_size, stride=1),
         ))
+        
         if edge_importance_weighting:
             self.edge_importance = nn.ParameterList([nn.Parameter(torch.ones(self.A.size())) for i in self.st_gcn_networks])
         else:
             self.edge_importance = [1] * len(self.st_gcn_networks)
-        self.fc_shared = nn.Linear(256, 512)
-        self.fc_forecast = nn.Linear(512, forecast_window * self.graph.num_node * forecast_channels)
+            
+        # --- CHANGED: Reduced shared fully connected layer size ---
+        # Reduced from 256->512 to 128->256
+        self.fc_shared = nn.Linear(128, 256)
+        
+        # FC layers updated to match the new shared layer output (256)
+        self.fc_forecast = nn.Linear(256, forecast_window * self.graph.num_node * forecast_channels)
         self.forecast_window = forecast_window
-        self.fc_class = nn.Linear(512, num_class)
+        self.fc_class = nn.Linear(256, num_class)
 
     def forward(self, x):
         N, C, T, V, M = x.size()

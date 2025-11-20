@@ -48,11 +48,14 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loss_forecast = nn.MSELoss()
     loss_class = nn.CrossEntropyLoss()
+    
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.5)
 
     epoch_losses = []
     epoch_accuracies = [] 
+    epoch_mpjpes = [] 
+    
     start_time = time.time()
-    all_preds, all_labels = [], []
 
     for epoch in range(num_epochs):
         model.train()
@@ -81,8 +84,7 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
 
             loss_f = loss_forecast(forecast_out, trg_forecast)
             loss_c = loss_class(class_out, torch.argmax(trg_class, dim=1))
-            loss = loss_f + loss_c
-
+            loss = loss_f + loss_c 
             loss.backward()
             optimizer.step()
 
@@ -101,47 +103,61 @@ def train(model, train_loader, num_epochs=1000, lr=1e-4, model_name="default_mod
             y_pred_epoch.extend(preds.cpu().numpy())
             y_true_epoch.extend(labels.cpu().numpy())
 
-        all_preds.extend(y_pred_epoch)
-        all_labels.extend(y_true_epoch)
-
         avg_loss = total_loss / total
-        avg_loss_f = total_loss_f / total
-        avg_loss_c = total_loss_c / total
         avg_mpjpe = sum(all_mpjpe) / len(all_mpjpe)
-        avg_mpjve = sum(all_mpjve) / len(all_mpjve)
         acc = correct / total
 
         epoch_losses.append(avg_loss)
-        epoch_accuracies.append(acc) 
+        epoch_accuracies.append(acc)
+        epoch_mpjpes.append(avg_mpjpe)
 
-        print(f"[Epoch {epoch+1}] Train → Loss: {avg_loss:.4f} | Forecast: {avg_loss_f:.4f} | "
-              f"Class: {avg_loss_c:.4f} | MPJPE: {avg_mpjpe:.4f} | MPJVE: {avg_mpjve:.4f} | Acc: {acc:.4f}")
+        print(f"[Epoch {epoch+1}] Train → Loss: {avg_loss:.4f} | Forecast: {(total_loss_f/total):.4f} | "
+              f"Class: {(total_loss_c/total):.4f} | MPJPE: {avg_mpjpe:.4f} | Acc: {acc:.4f}")
         
-        cm = confusion_matrix(y_true_epoch, y_pred_epoch)
-        print(f"[Epoch {epoch+1}] Confusion Matrix:\n{cm}")
+        scheduler.step(avg_loss)
 
     end_time = time.time()
     total_minutes = (end_time - start_time) / 60
     print(f"[INFO] Total Training Time: {total_minutes:.2f} minutes")
 
-    # Save the model to 
+    os.makedirs("results/saved_models", exist_ok=True)
     model_path = f"results/saved_models/{model_name}_{num_epochs}.pt"
     torch.save(model.state_dict(), model_path)
-
     print(f"[INFO] Model saved to {model_path}")
 
-    # Plot and save loss curve
+    os.makedirs("results/plots", exist_ok=True)
+
+    # 1. Loss Plot
     plt.figure(figsize=(10, 6))
     plt.plot(range(1, num_epochs + 1), epoch_losses, color='blue', linewidth=2)
-    plt.title("Training Loss Over Epochs STGCN", fontsize=14)
-    plt.xlabel("Epoch", fontsize=12)
-    plt.ylabel("Total Loss", fontsize=12)
+    plt.title("Training Loss (Balanced)", fontsize=14)
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
     plt.grid(True)
-    plt.tight_layout()
-    loss_plot_path = f"results/plots/{model_name}_loss_curve_{num_epochs}.png"
-    plt.savefig(loss_plot_path, dpi=600)
-    print(f"[INFO] Loss curve saved to {loss_plot_path}")
-    plt.close() 
+    plt.savefig(f"results/plots/{model_name}_loss.png")
+    plt.close()
+
+    # 2. Accuracy Plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, num_epochs + 1), epoch_accuracies, color='green', linewidth=2)
+    plt.title("Training Accuracy", fontsize=14)
+    plt.xlabel("Epoch")
+    plt.ylabel("Accuracy")
+    plt.grid(True)
+    plt.savefig(f"results/plots/{model_name}_accuracy.png")
+    plt.close()
+
+    # 3. MPJPE Plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(1, num_epochs + 1), epoch_mpjpes, color='red', linewidth=2)
+    plt.title("Training MPJPE (Forecast Error)", fontsize=14)
+    plt.xlabel("Epoch")
+    plt.ylabel("MPJPE")
+    plt.grid(True)
+    plt.savefig(f"results/plots/{model_name}_mpjpe.png")
+    plt.close()
+    
+    print(f"[INFO] Plots saved to results/plots/")
 
 # -------------------------
 # Run Training

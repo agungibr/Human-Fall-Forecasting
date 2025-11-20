@@ -30,7 +30,6 @@ SKELETON_EDGES = [
     (7, 9), (6, 8), (8, 10), (11, 13), (13, 15), (12, 14), (14, 16), (0, 5), (0, 6)
 ]
 
-# --- (draw_pose, visualize_single_frame, and visualize_cross_windows functions are unchanged) ---
 def draw_pose(ax, pose, color, alpha=1.0, linewidth=2):
     for (i, j) in SKELETON_EDGES:
         if i < pose.shape[0] and j < pose.shape[0]:
@@ -101,7 +100,6 @@ def visualize_cross_windows(pred_batch, tgt_batch, model_name, batch_idx=0, star
     plt.savefig(save_path, bbox_inches='tight', dpi=600); plt.close()
     print(f"[INFO] Saved cross-window visualization to {save_path}")
 
-# --- NEW FUNCTION: Plot Confusion Matrix ---
 def plot_confusion_matrix(y_true, y_pred, model_name):
     """Generates and saves a confusion matrix plot."""
     cm = confusion_matrix(y_true, y_pred)
@@ -118,7 +116,6 @@ def plot_confusion_matrix(y_true, y_pred, model_name):
     print(f"[INFO] Saved confusion matrix to {save_path}")
     
 def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, visualize_motion="5_forward_falls"):
-    # ... (code for setting up device, model_name, and loading data is unchanged) ...
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model_name = os.path.basename(model_path).split('_')[0]
     print(f"[INFO] Evaluating model: {model_name.upper()}")
@@ -146,7 +143,6 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         for motion, count in subject_motion_windows[subj].items():
             print(f"  - {motion}: {count} sliding windows")
     
-    # ... (code for defining dimensions and initializing models is unchanged) ...
     input_window = len(test_data["src"][0])
     keypoints_dim = len(test_data["src"][0][0]) * len(test_data["src"][0][0][0])
     num_coords = len(test_data["src"][0][0][0]) 
@@ -188,7 +184,6 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
         visualized = False
         motion_forecast, motion_target = [], []
         
-        # --- ADDED: Lists to store all predictions and labels for CM plot ---
         all_preds, all_labels = [], []
 
         for idx, batch in enumerate(test_loader):
@@ -213,11 +208,10 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
             total_loss_f += loss_f.item() * src.size(0)
             total_loss_c += loss_c.item() * src.size(0)
             preds = torch.argmax(class_out, dim=1)
-            labels = torch.argmax(tr_class, dim=1) # Corrected typo here
+            labels = torch.argmax(trg_class, dim=1)
             correct += (preds == labels).sum().item()
             total += trg_class.size(0)
             
-            # --- ADDED: Store predictions and labels ---
             all_preds.extend(preds.cpu().numpy())
             all_labels.extend(labels.cpu().numpy())
 
@@ -231,7 +225,6 @@ def evaluate(model_path="results/saved_models/stgcn_1000.pt", batch_size=32, vis
                     motion_forecast.append(forecast_out[i:i+1].cpu())
                     motion_target.append(trg_forecast[i:i+1].cpu())
 
-        # ... (visualization logic is unchanged) ...
         if motion_forecast:
             pred_all = torch.cat(motion_forecast, dim=0).numpy()
             target_all = torch.cat(motion_target, dim=0).numpy()
