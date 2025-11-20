@@ -36,7 +36,7 @@ def mpjve(pred, target):
 
 model_name = "stgcn"  
 batch_size = 32
-num_epochs = 10
+num_epochs = 1000
 lr = 0.0001
 
 # -------------------------
